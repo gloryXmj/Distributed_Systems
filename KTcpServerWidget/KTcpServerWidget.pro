@@ -1,6 +1,6 @@
 #-------------------------------------------------
 #
-# Project created by QtCreator 2023-07-27T14:47:04
+# Project created by QtCreator 2023-07-28T11:14:31
 #
 #-------------------------------------------------
 
@@ -8,9 +8,9 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-TARGET = KTcpClientWidget
+TARGET = KTcpServerWidget
 TEMPLATE = app
-CONFIG+= c++14
+
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which has been marked as deprecated (the exact warnings
 # depend on your compiler). Please consult the documentation of the
@@ -21,26 +21,27 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # In order to do so, uncomment the following line.
 # You can also select to disable deprecated APIs only up to a certain version of Qt.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
-
-
+INCLUDEPATH += $$PWD/../../../Workspace/KVIS16/Src/KVIS16.0/KAIVipInclude/
 SOURCES += \
         main.cpp \
         MainWindow.cpp \
-        KTcpClient.cpp
-# \
-#    KTcpProtocol.cpp
+    KTcpServer.cpp
 
 HEADERS += \
         MainWindow.h \
-        KTcpClient.h
-#\
-#    KTcpProtocol.h
+    KTcpServer.h
 
 FORMS += \
         MainWindow.ui
 
-LIBS+= -lpthread
+CONFIG(debug,debug|release){
+LIBS  +=  -L$$PWD/../../../Workspace/KVIS16/UNIX/Bin/Debug/ -lKAIVipFramework
+}else{
+LIBS  +=  -L$$PWD/../../../Workspace/KVIS16/UNIX/Bin/Release/ -lKAIVipFramework
+}
+
 unix{
     CONFIG      += link_pkgconfig
     PKGCONFIG   += opencv4
 }
+

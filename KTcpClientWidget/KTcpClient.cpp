@@ -10,14 +10,24 @@
 #include <thread>
 #include <chrono>
 #include <opencv2/opencv.hpp>
-
+#include <dirent.h>
+#include <QThread>
+#include <netinet/tcp.h>
 static int  clientId = 0;
 const int MAX_EVENTS = 1024;
 KTcpClient::KTcpClient()
 {
     /// socket的建立
     m_socketFd = socket(AF_INET , SOCK_STREAM ,IPPROTO_TCP);
+    //    int buffer_size = 9000;
+    //    socklen_t buffer_size_len = sizeof(buffer_size);
+    //    std::cout << getsockopt(m_socketFd,SOL_SOCKET,SO_SNDBUF,&buffer_size,&buffer_size_len);
+    //    std::cout << buffer_size << std::endl;
+    //    int one = 1;
+    //    setsockopt(m_socketFd,SOL_TCP,TCP_NODELAY,&one , sizeof(one));
+    //    setsockopt(m_socketFd,SOL_TCP,TCP_CORK,&one , sizeof(one));
 
+    //    std::cout << setsockopt(m_socketFd,SOL_SOCKET,SO_SNDBUF,&buffer_size,sizeof(buffer_size));
     if (m_socketFd == -1){
         printf("Fail to create a socket.");
         return ;
@@ -79,13 +89,13 @@ KTcpClient::KTcpClient()
                 if ((events[i].events & EPOLLOUT) && (sockfd == m_socketFd)) {
                     messageIndex++;
                     //                                        transmissionImageDatas();
-//                    sprintf(buffer,"this is client  %02d message Index %02d \0",curClinetId, messageIndex);
-//                    ssize_t len = send(sockfd, buffer, sizeof(buffer),0);
-//                    if (len == -1) {
-//                        perror("send() failed");
-//                        continue;
-//                    }
-//                    memset(buffer, 0, sizeof(buffer));
+                    //                    sprintf(buffer,"this is client  %02d message Index %02d \0",curClinetId, messageIndex);
+                    //                    ssize_t len = send(sockfd, buffer, sizeof(buffer),0);
+                    //                    if (len == -1) {
+                    //                        perror("send() failed");
+                    //                        continue;
+                    //                    }
+                    //                    memset(buffer, 0, sizeof(buffer));
                 }
                 if ((events[i].events & EPOLLIN) && (sockfd == m_socketFd)) {
                     ssize_t len = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -146,29 +156,39 @@ void KTcpClient::sendImage()
 
 void KTcpClient::transmissionImageDatas()
 {
-    cv::Mat imageRead =  cv::imread("/home/nvidia/KTestProgams/KTcpClientWidget/111.png");
-    int totalSize = imageRead.total() * imageRead.elemSize();
-    int packageSize = (9000 - 20 - 20);
-    int imageDataSize = imageRead.cols*imageRead.rows*imageRead.channels();
-    int packageCount = totalSize / packageSize + 1; /// MTU 9000 IP_header 20  TCP_header 20
-    auto pre = std::chrono::high_resolution_clock::now();
-    for(int packageIndex = 0 ; packageIndex < packageCount;packageIndex ++ )
-    {
-        std::cout << "package Index :" <<  packageIndex << std::endl;
-        if(packageIndex != packageCount -1)
-        {
-            send(m_socketFd,imageRead.data+packageSize*packageIndex,packageSize,MSG_DONTWAIT);
-            std::cout << "Send package size : " <<  packageSize << std::endl;
-        }
-        else
-        {
-            send(m_socketFd,imageRead.data+packageSize*packageIndex,(totalSize - packageIndex*packageSize),MSG_DONTWAIT);
-            std::cout << "Send Other package Size : " << (totalSize - packageIndex*packageSize) <<std::endl;
-        }
-        usleep(1000);
-    }
-    auto now =  std::chrono::high_resolution_clock::now();
-    std::cout << "send Time  "<< std::chrono::duration_cast<std::chrono::microseconds>(now-pre).count() << std::endl;
+    QThread *thread = QThread::create([=](){
+        std::vector<std::string>	calibFiles;
+        calibFiles = searchDirectory("/home/nvidia/Pictures/1/", "png");
+        while(1)
+            for(const auto &fileName : calibFiles)
+            {
+                cv::Mat imageRead = cv::imread(fileName) ;
+                int totalSize = imageRead.total() * imageRead.elemSize();
+                int packageSize = (9000 - 20 - 20);
+                //int imageDataSize = imageRead.cols*imageRead.rows*imageRead.channels();
+                int packageCount = totalSize / packageSize + 1; /// MTU 9000 IP_header 20  TCP_header 20
+                auto pre = std::chrono::high_resolution_clock::now();
+                for(int packageIndex = 0 ; packageIndex < packageCount;packageIndex ++ )
+                {
+                    //                std::cout << "package Index :" <<  packageIndex << std::endl;
+                    if(packageIndex != packageCount -1)
+                    {
+                        Send_Thread_Safety(m_socketFd,imageRead.data+packageSize*packageIndex,packageSize,MSG_DONTWAIT);
+                        //                    std::cout << "Send package size : " <<  packageSize << std::endl;
+                    }
+                    else
+                    {
+                        Send_Thread_Safety(m_socketFd,imageRead.data+packageSize*packageIndex,(totalSize - packageIndex*packageSize),MSG_DONTWAIT);
+                        //                    std::cout << "Send Other package Size : " << (totalSize - packageIndex*packageSize) <<std::endl;
+                    }
+                    usleep(1);
+                }
+                auto now =  std::chrono::high_resolution_clock::now();
+                std::cout << m_socketFd <<  "  send Time  "<< std::chrono::duration_cast<std::chrono::microseconds>(now-pre).count() << std::endl;
+            }
+    });
+    //    QObject::connect(thread,&QThread::finished,thread,&QThread::deleteLater);
+    thread->start(QThread::TimeCriticalPriority);
 }
 
 void KTcpClient::creatSendData()
@@ -180,4 +200,25 @@ void KTcpClient::creatSendData(char *pointer, size_t size)
 {
     m_sendData.dataPointer =  pointer;
     m_sendData.dataSize = size;
+}
+
+size_t KTcpClient::Send_Thread_Safety(int __fd, const void *__buf, size_t __n, int __flags)
+{
+    std::unique_lock<std::shared_timed_mutex>lk(m_mutex,std::defer_lock);
+    return send(__fd,__buf,__n,__flags);
+}
+
+std::vector<std::string> KTcpClient::searchDirectory(const std::string &directory,	const std::string &suffix) {
+    std::vector<std::string> file_path;
+    DIR *dir = opendir(directory.c_str());
+    dirent *p = nullptr;
+    if(dir)
+        while ((p = readdir(dir)) != nullptr) {
+            if ('.' != p->d_name[0]) {
+                if (strstr(p->d_name, suffix.c_str())) {
+                    file_path.emplace_back(directory + '/' + p->d_name);
+                }
+            }
+        }
+    return file_path;
 }

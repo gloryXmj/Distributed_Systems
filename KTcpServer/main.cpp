@@ -5,6 +5,8 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <opencv2/opencv.hpp>
+#include <map>
+
 
 
 using namespace std;
@@ -14,6 +16,7 @@ int main()
 {
     std::vector<char> imageData;
     imageData.resize(192*1600*3);
+    std::map<int,std::vector<char>> imageDatas;
     const int  EPOLL_EVENT_SIZE = 20;
     char buff[65535];
     int socketFd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
@@ -98,7 +101,7 @@ int main()
                     else
                     {
                         //正常读取,打印读到的数据
-//                        std::cout << buff << std::endl;
+                        //                        std::cout << buff << std::endl;
                         //向客户端发数据
                         char a[100];
                         if(len < 1000)
@@ -107,20 +110,23 @@ int main()
                             sprintf(a,"recv buff  size: %05d",len);
                         //如果在windows中,向socket中写数据要用send()函数
                         write(events[i].data.fd, a, sizeof(a));
-                        static  int packageSize = 0;
+                        static  std::map<int,int> packageSizes;
                         if(len > 1000 )
                         {
-                            std::cout << "package Size :" <<  len << std::endl;
-                            memcpy(imageData.data()+packageSize,buff,len);
-                            packageSize += len;
-                            std::cout << "Recv package " << packageSize <<std::endl;
-                            if(packageSize == 192*1600*3)
+                            if(imageDatas[events[i].data.fd].size() <= 0)
                             {
-                                cv::Mat image(192,1600,CV_8UC3,imageData.data());
+                                imageDatas[events[i].data.fd] = imageData;
+                                packageSizes[events[i].data.fd] = 0;
+                            }
+                            std::cout << "package Size :" <<  len << std::endl;
+                            memcpy(imageDatas[events[i].data.fd].data() + packageSizes[events[i].data.fd],buff,len);
+                            packageSizes[events[i].data.fd] += len;
+                            std::cout << "Recv  : " << events[i].data.fd << " package " << packageSizes[events[i].data.fd] <<std::endl;
+                            if(packageSizes[events[i].data.fd] == 192*1600*3)
+                            {
+                                cv::Mat image(192,1600,CV_8UC3,imageDatas[events[i].data.fd].data());
                                 cv::imwrite("recv.png",image);
-                                cv::imshow("transmissionImage" , image);
-                                cv::waitKey();
-                                break;
+                                packageSizes[events[i].data.fd] = 0;
                             }
                         }
                     }
@@ -128,6 +134,5 @@ int main()
             }
         }
     }
-    std::cout << "Hello World!" << std::endl;
     return 0;
 }

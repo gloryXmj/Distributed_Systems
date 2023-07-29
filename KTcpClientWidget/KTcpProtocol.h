@@ -1,4 +1,4 @@
-#ifndef KTCPPROTOCOL_H
+﻿#ifndef KTCPPROTOCOL_H
 #define KTCPPROTOCOL_H
 #include <unistd.h>
 #include <vector>
@@ -12,6 +12,18 @@
  */
 
 #define K_Tcp_Custom_Head_Length 24
+enum Type_Flags
+{
+    Type_Begin,
+    Type_Message = Type_Begin ,
+    Type_Transmission_Files,
+    Type_Execute_Cmd,
+    Type_End,
+};
+
+
+
+
 class KTcpProtocol
 {
 public:
